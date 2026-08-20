@@ -1,12 +1,12 @@
-# ₿ Forecasting Nilai Bitcoin dengan Deep Learning (LSTM)
+# Forecasting Nilai Bitcoin dengan Deep Learning (LSTM)
 
 Peramalan (*forecasting*) harga **Bitcoin** untuk 24 jam ke depan menggunakan **LSTM**, dengan *custom layer* dan *custom training loop* yang dibangun dari nol menggunakan TensorFlow mencakup mekanisme **Multi-Head Attention** buatan sendiri hingga arsitektur **Seq2Seq** dengan *teacher forcing*.
 
-## 🎯 Tujuan
+## Tujuan
 
 Memprediksi harga penutupan (*Close price*) Bitcoin untuk **24 jam ke depan**, berdasarkan data historis 24 jam sebelumnya (per jam), menggunakan pendekatan *deep learning* untuk data deret waktu (*time series*).
 
-## 📊 Dataset
+## Dataset
 
 Dataset berupa data harga Bitcoin per jam (`Bitcoin3.csv`) yang mencakup fitur:
 
@@ -22,7 +22,7 @@ Data displit menjadi:
 - **15%** — Validation
 - **15%** — Test
 
-## 🔁 Alur Pengerjaan
+## Alur Pengerjaan
 
 ### 1. Eksplorasi Data (EDA)
 - Visualisasi **heatmap korelasi** antar fitur
@@ -56,7 +56,7 @@ Dua arsitektur model dibangun dan dibandingkan:
 - Callback kustom untuk *early stopping* dan *reduce learning rate on plateau*
 - Evaluasi akhir menggunakan **MAE (Mean Absolute Error)**
 
-## 📈 Hasil Evaluasi
+## Hasil Evaluasi
 
 | Model | MAE (skala 0–1, ternormalisasi) |
 |---|---|
@@ -65,11 +65,11 @@ Dua arsitektur model dibangun dan dibandingkan:
 
 Model **Baseline LSTM** menghasilkan MAE yang lebih rendah dibandingkan Seq2Seq LSTM pada dataset ini.
 
-## 📂 Struktur Project
+## Struktur Project
 
 ```
 Forecasting-Nilai-Bitcoin/
-├── Muhammad-Alif-Dhiyaumasrur-Submission-Akhir-DLTM.ipynb   # Notebook utama: EDA, preprocessing, training, evaluasi
+├── model_forecasting.ipynb   # Notebook utama: EDA, preprocessing, training, evaluasi
 ├── model_baseline_LSTM.keras                                 # Model Baseline LSTM hasil pelatihan
 ├── model_seq2seq_LSTM.keras                                  # Model Seq2Seq LSTM hasil pelatihan
 ├── best_model_seq2seq_LSTM.keras                              # Checkpoint model Seq2Seq LSTM terbaik
@@ -77,7 +77,7 @@ Forecasting-Nilai-Bitcoin/
 └── README.md
 ```
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Library | Versi |
 |---|---|
@@ -89,7 +89,7 @@ Forecasting-Nilai-Bitcoin/
 | **Matplotlib** | `3.10.0` — visualisasi data & hasil prediksi |
 | **Seaborn** | `0.13.2` — visualisasi heatmap korelasi |
 
-## ▶️ Cara Menjalankan
+## Cara Menjalankan
 
 1. **Clone repository**
    ```sh
@@ -104,9 +104,9 @@ Forecasting-Nilai-Bitcoin/
 
 3. **Jalankan notebook**
    ```sh
-   jupyter notebook Muhammad-Alif-Dhiyaumasrur-Submission-Akhir-DLTM.ipynb
+   jupyter notebook model_forecasting.ipynb
    ```
-   Jalankan seluruh cell secara berurutan. Perlu diperhatikan bahwa dataset dimuat dari path Kaggle (`/kaggle/input/...`) — sesuaikan path tersebut jika menjalankan di luar lingkungan Kaggle.
+   Jalankan seluruh cell secara berurutan. Perlu diperhatikan bahwa dataset dimuat dari path Kaggle (`/kaggle/input/...`), sesuaikan path tersebut jika menjalankan di luar lingkungan Kaggle.
 
 4. **Menggunakan model yang sudah dilatih**
 
@@ -125,6 +125,6 @@ Forecasting-Nilai-Bitcoin/
    ```
    > Karena model menggunakan *custom layer*, definisi kelasnya (ada di notebook) perlu di-import atau didefinisikan ulang saat memuat model.
 
-## 📌 Catatan
+## Catatan
 
-Proyek ini dibuat untuk tujuan pembelajaran mendalam mengenai *time series forecasting* dengan pendekatan *deep learning* — mulai dari analisis time series klasik (dekomposisi, ACF/PACF), pembangunan *custom layer* dan mekanisme *attention* dari nol, hingga *custom training loop* tanpa mengandalkan `model.fit()` bawaan Keras.
+Proyek ini dibuat untuk tujuan pembelajaran mendalam mengenai *time series forecasting* dengan pendekatan *deep learning*, mulai dari analisis time series klasik (dekomposisi, ACF/PACF), pembangunan *custom layer* dan mekanisme *attention* dari nol, hingga *custom training loop* tanpa mengandalkan `model.fit()` bawaan Keras.
