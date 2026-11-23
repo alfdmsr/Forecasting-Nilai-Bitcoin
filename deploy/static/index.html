@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prediksi Bitcoin 24 Jam — Material Design</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- M3 Top App Bar -->
+  <header class="md-top-app-bar">
+    <div class="md-top-inner">
+      <div class="md-brand">
+        <div class="md-avatar" aria-hidden="true">
+          <span class="material-symbols-rounded filled">currency_bitcoin</span>
+        </div>
+        <div>
+          <h1 class="md-title-large">Prediksi Bitcoin 24 Jam</h1>
+          <p class="md-body-small">Peramalan harga berbasis Deep Learning (LSTM + Attention)</p>
+        </div>
+      </div>
+
+      <div class="md-top-actions">
+        <div id="statusChip" class="md-assist-chip">
+          <span class="material-symbols-rounded icon-sm" id="statusIcon">pending</span>
+          <span id="statusText">Memuat...</span>
+        </div>
+        <a href="/docs" target="_blank" class="md-assist-chip md-chip-link">
+          <span class="material-symbols-rounded icon-sm">api</span>
+          <span>API Docs</span>
+        </a>
+      </div>
+    </div>
+    <!-- M3 Indeterminate Linear Progress Indicator -->
+    <div id="linearProgress" class="md-linear-progress hidden" role="progressbar" aria-label="Memuat prediksi">
+      <div class="md-linear-bar"></div>
+    </div>
+  </header>
+
+  <main class="md-container">
+    <!-- M3 Tonal Control Card -->
+    <section class="md-card md-card-filled">
+      <div class="md-controls-row">
+        <!-- M3 Segmented Button: Data Source -->
+        <div class="md-field">
+          <span class="md-label-medium">Sumber Data</span>
+          <div class="md-segmented" role="tablist" aria-label="Pilih Sumber Data">
+            <button class="md-seg-btn active" data-tab="sample" role="tab">
+              <span class="material-symbols-rounded seg-check">check</span>
+              <span class="material-symbols-rounded seg-ico">science</span>
+              <span>Sampel</span>
+            </button>
+            <button class="md-seg-btn" data-tab="live" role="tab">
+              <span class="material-symbols-rounded seg-check">check</span>
+              <span class="material-symbols-rounded seg-ico">bolt</span>
+              <span>Live BTC</span>
+            </button>
+            <button class="md-seg-btn" data-tab="csv" role="tab">
+              <span class="material-symbols-rounded seg-check">check</span>
+              <span class="material-symbols-rounded seg-ico">upload_file</span>
+              <span>Upload CSV</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- M3 Segmented Button: Model Selector -->
+        <div class="md-field">
+          <span class="md-label-medium">Arsitektur Model</span>
+          <div class="md-segmented" role="radiogroup" aria-label="Pilih Model">
+            <button class="md-seg-btn model-btn active" data-model="both">
+              <span class="material-symbols-rounded seg-check">check</span>
+              <span>Bandingkan</span>
+            </button>
+            <button class="md-seg-btn model-btn" data-model="baseline">
+              <span class="material-symbols-rounded seg-check">check</span>
+              <span>Baseline</span>
+            </button>
+            <button class="md-seg-btn model-btn" data-model="seq2seq">
+              <span class="material-symbols-rounded seg-check">check</span>
+              <span>Seq2Seq</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- M3 Filled Button -->
+        <button id="runBtn" class="md-btn-filled">
+          <span class="material-symbols-rounded icon-sm" id="runIcon">auto_graph</span>
+          <span id="runBtnText">Prediksi 24 Jam</span>
+        </button>
+      </div>
+
+      <!-- Contextual Options: Sample -->
+      <div id="sub-sample" class="md-sub-section active">
+        <label class="md-switch-wrap">
+          <input type="checkbox" id="sampleBacktest" class="md-switch-input" checked />
+          <span class="md-switch-track">
+            <span class="md-switch-thumb">
+              <span class="material-symbols-rounded switch-check">check</span>
+            </span>
+          </span>
+          <span class="md-body-medium">Mode Backtest (bandingkan dengan harga aktual)</span>
+        </label>
+
+        <div class="md-slider-wrap">
+          <span class="md-body-medium">Periode: <strong id="offsetVal">Terbaru</strong></span>
+          <input type="range" id="sampleOffset" class="md-slider" min="0" max="96" value="0" step="1" />
+        </div>
+      </div>
+
+      <!-- Contextual Options: Live -->
+      <div id="sub-live" class="md-sub-section">
+        <div class="md-inline-hint">
+          <span class="material-symbols-rounded icon-sm">info</span>
+          <span>Mengambil 120 candle BTC/USDT per jam terbaru secara real-time lalu menghitung indikator pasar otomatis.</span>
+        </div>
+      </div>
+
+      <!-- Contextual Options: CSV -->
+      <div id="sub-csv" class="md-sub-section md-sub-col">
+        <label for="csvFile" id="dropzone" class="md-dropzone">
+          <input type="file" id="csvFile" accept=".csv" hidden />
+          <span class="material-symbols-rounded dropzone-ico">cloud_upload</span>
+          <div>
+            <div id="csvFileName" class="md-title-small">Pilih atau seret file .csv ke sini</div>
+            <div class="md-body-small">Minimal 48 baris data per jam (skema Bitcoin3.csv atau OHLCV biasa)</div>
+          </div>
+        </label>
+        <div class="md-csv-actions">
+          <label class="md-switch-wrap">
+            <input type="checkbox" id="csvBacktest" class="md-switch-input" />
+            <span class="md-switch-track">
+              <span class="md-switch-thumb">
+                <span class="material-symbols-rounded switch-check">check</span>
+              </span>
+            </span>
+            <span class="md-body-medium">Uji akurasi pada 24 baris terakhir CSV</span>
+          </label>
+          <a href="/api/sample/download" class="md-btn-text">
+            <span class="material-symbols-rounded icon-sm">download</span>
+            <span>Unduh contoh CSV</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- M3 Banners -->
+    <div id="errorBanner" class="md-banner md-banner-error hidden">
+      <span class="material-symbols-rounded icon-sm">error</span>
+      <span id="errorText"></span>
+    </div>
+    <div id="infoBanner" class="md-banner md-banner-info hidden">
+      <span class="material-symbols-rounded icon-sm">info</span>
+      <span id="infoText"></span>
+    </div>
+
+    <!-- M3 Metric Summary Cards -->
+    <section id="summaryGrid" class="md-summary-grid"></section>
+
+    <!-- M3 Elevated Chart Card (Google Finance Style) -->
+    <section class="md-card md-card-elevated">
+      <div class="md-card-header">
+        <div>
+          <h2 class="md-title-medium">Grafik Historis &amp; Prediksi 24 Jam</h2>
+          <p id="sourceSubtitle" class="md-body-small">Menyiapkan data...</p>
+        </div>
+        <button id="exportCsvBtn" class="md-btn-tonal hidden">
+          <span class="material-symbols-rounded icon-sm">download</span>
+          <span>Export CSV</span>
+        </button>
+      </div>
+      <div class="md-chart-wrap">
+        <canvas id="forecastChart"></canvas>
+      </div>
+    </section>
+
+    <!-- M3 Primary Tabs Card -->
+    <section class="md-card md-card-outlined md-tabs-card">
+      <div class="md-tabs" role="tablist">
+        <button class="md-tab active" data-detail="table" role="tab">
+          <span class="material-symbols-rounded icon-sm">table_chart</span>
+          <span>Rincian Per Jam</span>
+        </button>
+        <button class="md-tab" data-detail="indicators" role="tab">
+          <span class="material-symbols-rounded icon-sm">tune</span>
+          <span>Indikator Pasar</span>
+        </button>
+        <button class="md-tab" data-detail="about" role="tab">
+          <span class="material-symbols-rounded icon-sm">analytics</span>
+          <span>Info Model &amp; Scaler</span>
+        </button>
+      </div>
+
+      <div class="md-tabs-body">
+        <div id="detail-table" class="detail-panel active">
+          <div class="md-table-wrap">
+            <table id="predictionTable">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="detail-indicators" class="detail-panel">
+          <p class="md-body-small" style="margin-bottom: 14px;">
+            8 nilai fitur pada jam terakhir yang dimasukkan ke model sebelum normalisasi:
+          </p>
+          <div id="indicatorGrid" class="md-indicator-grid"></div>
+        </div>
+
+        <div id="detail-about" class="detail-panel">
+          <div id="aboutGrid" class="md-about-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="md-footer">
+      Hanya untuk tujuan edukasi &amp; eksperimen Deep Learning — bukan saran finansial.
+    </footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

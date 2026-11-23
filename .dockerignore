@@ -1,0 +1,12 @@
+.git
+.gitignore
+skills/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+model_forecasting.ipynb
+best_model_seq2seq_LSTM.keras
+README.md
+requirements.txt
+.DS_Store
