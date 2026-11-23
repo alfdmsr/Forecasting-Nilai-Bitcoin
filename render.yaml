@@ -5,8 +5,3 @@ services:
     branch: deploy
     plan: free
     healthCheckPath: /api/health
-    envVars:
-      - key: CUDA_VISIBLE_DEVICES
-        value: "-1"
-      - key: TF_CPP_MIN_LOG_LEVEL
-        value: "2"

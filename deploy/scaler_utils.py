@@ -1,4 +1,4 @@
-"""MinMaxScaler management: loads exact training scaler if available, or calibrated fallback."""
+"""MinMaxScaler management (Pure NumPy): loads exact training scaler if available, or fallback."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 
 from deploy.indicators import MODEL_FEATURES
 
@@ -41,32 +40,27 @@ FALLBACK_MAX = [
 
 @dataclass
 class ScalerBundle:
-    scaler: MinMaxScaler
+    data_min: np.ndarray
+    data_max: np.ndarray
     mode: str  # "exact_training" | "estimated_fallback"
     source: str
     metadata: dict
 
+    @property
+    def data_range(self) -> np.ndarray:
+        span = self.data_max - self.data_min
+        return np.where(span == 0.0, 1.0, span)
+
     def transform_window(self, window_df: pd.DataFrame) -> np.ndarray:
         """Transform a (24, 8) feature DataFrame into a (1, 24, 8) float32 array."""
         ordered = window_df[MODEL_FEATURES].to_numpy(dtype=np.float64)
-        scaled = self.scaler.transform(ordered)
+        scaled = (ordered - self.data_min) / self.data_range
         return np.expand_dims(scaled.astype(np.float32), axis=0)
 
     def inverse_transform_close(self, scaled_preds: np.ndarray) -> np.ndarray:
         """Inverse-scale predicted Close values (column index 0) back to USD."""
         arr = np.asarray(scaled_preds, dtype=np.float64)
-        flat = arr.flatten()
-        dummy = np.zeros((len(flat), self.scaler.n_features_in_), dtype=np.float64)
-        dummy[:, 0] = flat
-        inv = self.scaler.inverse_transform(dummy)[:, 0]
-        return inv.reshape(arr.shape)
-
-
-def _build_sklearn_scaler(data_min: list[float], data_max: list[float]) -> MinMaxScaler:
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    dummy_fit = np.vstack([np.asarray(data_min, dtype=np.float64), np.asarray(data_max, dtype=np.float64)])
-    scaler.fit(dummy_fit)
-    return scaler
+        return arr * self.data_range[0] + self.data_min[0]
 
 
 def load_scaler(scaler_path: Path | None = None) -> ScalerBundle:
@@ -76,28 +70,32 @@ def load_scaler(scaler_path: Path | None = None) -> ScalerBundle:
         features = payload.get("features", MODEL_FEATURES)
         if features != MODEL_FEATURES:
             raise ValueError(f"Urutan fitur di {path} tidak cocok: {features}")
-        scaler = _build_sklearn_scaler(payload["data_min"], payload["data_max"])
+        dmin = np.asarray(payload["data_min"], dtype=np.float64)
+        dmax = np.asarray(payload["data_max"], dtype=np.float64)
         return ScalerBundle(
-            scaler=scaler,
+            data_min=dmin,
+            data_max=dmax,
             mode="exact_training",
             source=str(path.name),
             metadata={
                 "train_rows": payload.get("train_rows"),
                 "date_start": payload.get("train_date_start"),
                 "date_end": payload.get("train_date_end"),
-                "close_min_usd": payload["data_min"][0],
-                "close_max_usd": payload["data_max"][0],
+                "close_min_usd": float(dmin[0]),
+                "close_max_usd": float(dmax[0]),
             },
         )
 
-    scaler = _build_sklearn_scaler(FALLBACK_MIN, FALLBACK_MAX)
+    dmin = np.asarray(FALLBACK_MIN, dtype=np.float64)
+    dmax = np.asarray(FALLBACK_MAX, dtype=np.float64)
     return ScalerBundle(
-        scaler=scaler,
+        data_min=dmin,
+        data_max=dmax,
         mode="estimated_fallback",
         source="built-in BTC 2017-2021 calibration",
         metadata={
-            "close_min_usd": FALLBACK_MIN[0],
-            "close_max_usd": FALLBACK_MAX[0],
+            "close_min_usd": float(dmin[0]),
+            "close_max_usd": float(dmax[0]),
             "note": "Jalankan `python3 deploy/extract_scaler.py /path/to/Bitcoin3.csv` untuk kalibrasi 100% eksak.",
         },
     )

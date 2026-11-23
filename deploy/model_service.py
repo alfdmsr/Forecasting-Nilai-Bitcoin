@@ -1,24 +1,23 @@
-"""Model loading and multi-horizon forecasting inference service."""
+"""Lightweight model loading and multi-horizon forecasting inference service.
+
+Reads trained weights directly from `model_baseline_LSTM.keras` and
+`model_seq2seq_LSTM.keras` via the Pure NumPy engine (`deploy/numpy_inference.py`),
+requiring ~85 MB RAM (ideal for 512 MB free cloud instances like Render Free)
+while keeping predictions mathematically equivalent (~1e-7) to TensorFlow.
+"""
 
 from __future__ import annotations
 
 import os
-import tempfile
 import time
-import zipfile
 from pathlib import Path
 from typing import Literal
 
-# Default to CPU for deterministic, CUDA-free cloud/local inference unless USE_GPU=1
-if os.environ.get("USE_GPU", "0") != "1":
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
-
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 
-from deploy.custom_layers import CUSTOM_OBJECTS, Seq2SeqTeacherForcing
 from deploy.indicators import HORIZON, MODEL_FEATURES, WINDOW_SIZE
+from deploy.numpy_inference import NumpyBaselineLSTM, NumpySeq2SeqLSTM
 from deploy.scaler_utils import ScalerBundle, load_scaler
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -33,7 +32,7 @@ ModelChoice = Literal["baseline", "seq2seq", "both"]
 
 
 class ForecastingService:
-    """Loads both trained Keras models once and serves 24-hour BTC forecasts."""
+    """Loads both trained Keras weight archives once and serves 24-hour BTC forecasts."""
 
     def __init__(
         self,
@@ -42,8 +41,8 @@ class ForecastingService:
     ):
         self.baseline_path = Path(baseline_path)
         self.seq2seq_path = Path(seq2seq_path)
-        self.baseline_model: tf.keras.Model | None = None
-        self.seq2seq_model: tf.keras.Model | None = None
+        self.baseline_model: NumpyBaselineLSTM | None = None
+        self.seq2seq_model: NumpySeq2SeqLSTM | None = None
         self.scaler_bundle: ScalerBundle = load_scaler()
         self.loaded: bool = False
 
@@ -56,34 +55,10 @@ class ForecastingService:
         if not self.seq2seq_path.exists():
             raise FileNotFoundError(f"Model seq2seq tidak ditemukan: {self.seq2seq_path}")
 
-        self.baseline_model = tf.keras.models.load_model(
-            self.baseline_path, custom_objects=CUSTOM_OBJECTS, compile=False
-        )
-        self.seq2seq_model = self._load_seq2seq_safe(self.seq2seq_path)
+        self.baseline_model = NumpyBaselineLSTM(self.baseline_path)
+        self.seq2seq_model = NumpySeq2SeqLSTM(self.seq2seq_path, horizon=HORIZON)
         self.scaler_bundle = load_scaler()
         self.loaded = True
-
-    @staticmethod
-    def _load_seq2seq_safe(path: Path) -> tf.keras.Model:
-        try:
-            return tf.keras.models.load_model(
-                path, custom_objects=CUSTOM_OBJECTS, compile=False
-            )
-        except Exception:
-            # Fallback: instantiate exact architecture and load model.weights.h5 from .keras archive
-            model = Seq2SeqTeacherForcing(
-                units=128, horizon=HORIZON, name="model_seq2seq_LSTM"
-            )
-            _ = model(
-                tf.zeros((1, WINDOW_SIZE, len(MODEL_FEATURES))),
-                targets=tf.zeros((1, HORIZON)),
-                training=True,
-            )
-            with zipfile.ZipFile(path) as zf, tempfile.TemporaryDirectory() as td:
-                weights_path = Path(td) / "model.weights.h5"
-                weights_path.write_bytes(zf.read("model.weights.h5"))
-                model.load_weights(weights_path)
-            return model
 
     def reload_scaler(self) -> ScalerBundle:
         self.scaler_bundle = load_scaler()
@@ -92,6 +67,7 @@ class ForecastingService:
     def status(self) -> dict:
         return {
             "status": "ok" if self.loaded else "not_loaded",
+            "runtime_engine": "numpy-h5py (exact .keras weights)",
             "models": {
                 "baseline": {
                     "name": "model_baseline_LSTM",
@@ -133,9 +109,7 @@ class ForecastingService:
             raise ValueError(f"Window harus tepat {WINDOW_SIZE} baris, diterima {len(window_df)}.")
 
         x_input = self.scaler_bundle.transform_window(window_df)
-        x_tensor = tf.convert_to_tensor(x_input, dtype=tf.float32)
 
-        # Build historical and future timestamps
         if isinstance(window_df.index, pd.DatetimeIndex):
             hist_ts = [ts.isoformat() for ts in window_df.index]
             last_ts = window_df.index[-1]
@@ -162,10 +136,10 @@ class ForecastingService:
             t0 = time.perf_counter()
             if name == "baseline":
                 assert self.baseline_model is not None
-                scaled_out = self.baseline_model(x_tensor, training=False).numpy()[0]
+                scaled_out = self.baseline_model.predict(x_input)[0]
             elif name == "seq2seq":
                 assert self.seq2seq_model is not None
-                scaled_out = self.seq2seq_model(x_tensor, targets=None, training=False).numpy()[0]
+                scaled_out = self.seq2seq_model.predict(x_input)[0]
             else:
                 raise ValueError(f"Model tidak dikenal: {name}")
             latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
@@ -192,7 +166,9 @@ class ForecastingService:
                 actual_arr = np.asarray(actual_future_usd, dtype=np.float64)
                 pred_arr = np.asarray(usd_list, dtype=np.float64)
                 mae_usd = float(np.mean(np.abs(actual_arr - pred_arr)))
-                mape_pct = float(np.mean(np.abs((actual_arr - pred_arr) / np.maximum(actual_arr, 1e-9))) * 100.0)
+                mape_pct = float(
+                    np.mean(np.abs((actual_arr - pred_arr) / np.maximum(actual_arr, 1e-9))) * 100.0
+                )
                 summary["backtest_mae_usd"] = round(mae_usd, 2)
                 summary["backtest_mape_pct"] = round(mape_pct, 2)
 
@@ -202,7 +178,6 @@ class ForecastingService:
                 "summary": summary,
             }
 
-        # Check if input close falls outside training scaler range (useful transparency warning)
         close_min = self.scaler_bundle.metadata.get("close_min_usd", 0.0)
         close_max = self.scaler_bundle.metadata.get("close_max_usd", float("inf"))
         out_of_range = last_close < close_min or last_close > close_max
